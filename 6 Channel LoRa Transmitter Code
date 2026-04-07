@@ -1,0 +1,49 @@
+#include <SPI.h>
+#include <LoRa.h>
+
+// Purana Signal structure (NRF wala hi hai)
+struct Signal {
+  byte throttle;
+  byte yaw;
+  byte pitch;
+  byte roll;
+  byte aux1;
+  byte aux2;
+};
+
+Signal data;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(2, INPUT_PULLUP); // AUX1 Switch
+
+  // LoRa Pins: NSS=10, RST=9, DIO0=2 (Default SPI pins used)
+  if (!LoRa.begin(433E6)) { // 433MHz frequency
+    Serial.println("LoRa Connection Error!");
+    while (1);
+  }
+
+  // Range badhane ki settings
+  LoRa.setSpreadingFactor(10); 
+  LoRa.setSignalBandwidth(125E3);
+  LoRa.setTxPower(20); // Maximum 20dBm power
+
+  Serial.println("LoRa TX Ready!");
+}
+
+void loop() {
+  // Purani mapping jo aap NRF mein use kar rahe the
+  data.throttle = map(analogRead(A0), 0, 1023, 0, 255);
+  data.yaw      = map(analogRead(A1), 0, 1023, 0, 255);
+  data.pitch    = map(analogRead(A2), 0, 1023, 0, 255);
+  data.roll     = map(analogRead(A3), 0, 1023, 0, 255);
+  data.aux1     = digitalRead(2);
+  data.aux2     = map(analogRead(A7), 0, 1023, 0, 255);
+
+  // Data Bhejne ka tarika (LoRa style)
+  LoRa.beginPacket();
+  LoRa.write((uint8_t*)&data, sizeof(Signal));
+  LoRa.endPacket();
+
+  delay(20); // Stability ke liye chhota delay
+}
