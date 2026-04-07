@@ -1,0 +1,72 @@
+#include <SPI.h>
+#include <nRF24L01.h>
+#include <RF24.h>
+
+const uint64_t pipeOut = 0xE9E8F0F0E1LL;
+RF24 radio(7, 8); // CE=7, CSN=8
+
+struct Signal {
+  byte throttle;
+  byte yaw;
+  byte pitch;
+  byte roll;
+  byte aux1;
+  byte aux2;
+};
+
+Signal data;
+
+void ResetData() {
+  data.throttle = 12; 
+  data.yaw = 127;
+  data.pitch = 127;
+  data.roll = 127;
+  data.aux1 = 0;
+  data.aux2 = 127;
+}
+
+int mapJoystickValues(int val, int lower, int middle, int upper, bool reverse) {
+  val = constrain(val, lower, upper);
+  if (val < middle)
+    val = map(val, lower, middle, 0, 128);
+  else
+    val = map(val, middle, upper, 128, 255);
+  return (reverse ? 255 - val : val);
+}
+
+void setup() {
+  pinMode(2, INPUT_PULLUP); // AUX1 Switch
+  Serial.begin(250000);
+
+  if (!radio.begin()) {
+    Serial.println("NRF Error!");
+    while (1);
+  }
+
+  radio.openWritingPipe(pipeOut);
+  radio.setAutoAck(false);
+  radio.setCRCLength(RF24_CRC_8);
+  
+  // --- RANGE SETTINGS ---
+  radio.setDataRate(RF24_250KBPS); // Speed kam = Range zyada (Sabse zaruri)
+  radio.setPALevel(RF24_PA_MAX);   // Power Maximum
+  radio.setChannel(115);           // WiFi se door stable channel
+  // ----------------------
+  
+  radio.stopListening();
+  ResetData();
+  Serial.println("Transmitter Ready - 250KBPS Mode");
+}
+
+void loop() {
+  data.throttle = mapJoystickValues(analogRead(A0), 12, 524, 1020, true);
+  data.yaw      = mapJoystickValues(analogRead(A1), 12, 524, 1020, false);
+  data.roll     = mapJoystickValues(analogRead(A3), 12, 524, 1020, true);
+  data.pitch    = mapJoystickValues(analogRead(A2), 12, 524, 1020, false);
+  
+  data.aux1 = digitalRead(2); 
+  data.aux2 = mapJoystickValues(analogRead(A7), 12, 524, 1020, true);
+  
+  radio.write(&data, sizeof(Signal));
+  delay(20); 
+}
