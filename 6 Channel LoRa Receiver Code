@@ -1,0 +1,63 @@
+#include <SPI.h>
+#include <LoRa.h>
+#include <Servo.h>
+
+Servo ch1, ch2, ch3, ch4, ch5, ch6;
+
+struct Signal {
+  byte throttle;
+  byte yaw;
+  byte pitch;
+  byte roll;
+  byte aux1;
+  byte aux2;
+};
+
+Signal data;
+unsigned long lastRecvTime = 0;
+
+void ResetData() {
+  data.throttle = 12; // Safety start
+  data.yaw = 127; data.pitch = 127; data.roll = 127;
+  data.aux1 = 0; data.aux2 = 127;
+}
+
+void setup() {
+  Serial.begin(9600);
+  
+  if (!LoRa.begin(433E6)) {
+    Serial.println("LoRa Error!");
+    while (1);
+  }
+
+  // Settings TX ke saath match karni chahiye
+  LoRa.setSpreadingFactor(10);
+
+  // Servos connect karein (Purane pins)
+  ch1.attach(9); ch2.attach(2); ch3.attach(3);
+  ch4.attach(4); ch5.attach(5); ch6.attach(6);
+  
+  ResetData();
+}
+
+void loop() {
+  // Data check karne ka tarika
+  int packetSize = LoRa.parsePacket();
+  if (packetSize) {
+    LoRa.readBytes((uint8_t*)&data, sizeof(Signal));
+    lastRecvTime = millis();
+  }
+
+  // Fail-safe (Signal khone par stop)
+  if (millis() - lastRecvTime > 1000) {
+    ResetData();
+  }
+
+  // Servo map aur output
+  ch1.writeMicroseconds(map(data.roll, 0, 255, 1000, 2000));
+  ch2.writeMicroseconds(map(data.pitch, 0, 255, 1000, 2000));
+  ch3.writeMicroseconds(map(data.throttle, 0, 255, 1000, 2000));
+  ch4.writeMicroseconds(map(data.yaw, 0, 255, 1000, 2000));
+  ch5.writeMicroseconds(data.aux1 == 0 ? 1000 : 2000);
+  ch6.writeMicroseconds(map(data.aux2, 0, 255, 1000, 2000));
+}
